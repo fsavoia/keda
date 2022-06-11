@@ -1,0 +1,38 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: rusoto-sqs-k8s-demo
+  namespace: demo
+spec:
+  scaleTargetRef:
+    name: rusoto-sqs-k8s-demo
+  minReplicaCount: 1  # We don't want pods if the queue is empty
+  maxReplicaCount: 10  # We don't want to have more than 5 replicas
+  pollingInterval: 15 # How frequently we should go for metrics (in seconds)
+  cooldownPeriod:  30 # How many seconds should we wait for downscale  
+  triggers:
+  - type: aws-sqs-queue
+    authenticationRef:
+      name: keda-aws-credentials
+    metadata:
+      queueURL: https://sqs.us-east-1.amazonaws.com/652839185683/keda-test-queue
+      queueLength: "2"
+      awsRegion: "us-east-1"
+      identityOwner: operator
+  - type: memory
+    metadata:
+      type: Utilization
+      value: "80"
+  - type: cpu
+    metadata:
+      type: Utilization
+      value: "60"
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: keda-aws-credentials
+  namespace: demo
+spec:
+  podIdentity:
+    provider: aws-eks

@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rusoto-sqs-k8s-demo
+  namespace: demo
+  labels:
+    app.kubernetes.io/name: rusoto-sqs-k8s-demo
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:    
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rusoto-sqs-k8s-demo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rusoto-sqs-k8s-demo
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 2
+          topologyKey: "topology.kubernetes.io/zone"
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: rusoto-sqs-k8s-demo
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: eks/nodegroup-name
+                operator: In
+                values:
+                - ng_app_managed
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: karpenter
+                operator: In
+                values:
+                - "true"
+      tolerations:
+      - key: "kubernetes.io/karpenter-taint"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "dedicated"
+        operator: "Equal"
+        value: "application"
+        effect: "NoSchedule"
+      containers:
+        - name: rusoto-sqs-k8s-demo
+          image: "652839185683.dkr.ecr.us-east-1.amazonaws.com/demo:rusoto-sqs-k8s-demo"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: status
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: status
+          readinessProbe:
+            tcpSocket:
+              port: status
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          env:
+          - name: "AWS_REGION"
+            value: us-east1-1
+          - name: "QUEUE_URL"
+            valueFrom:
+                secretKeyRef:
+                  name: rusoto-sqs-k8s-demo-secrets
+                  key: queue_url
+          - name: "RUST_LOG"
+            value: info
+      serviceAccountName: rusoto-sqs-consumer
+      securityContext:
+        fsGroup: 65534
